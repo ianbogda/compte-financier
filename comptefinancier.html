@@ -1,0 +1,2311 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EPLE – Compte financier (Multi-onglets)</title>
+
+  <!-- Bootstrap 5 + Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+
+  <!-- SheetJS (XLSX) + Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <style>
+    :root{
+      --app-bg:#f7f8fb;
+      --app-card:#ffffff;
+    }
+    body{ background:var(--app-bg); }
+    .app-header{
+      background: linear-gradient(180deg, #ffffff 0%, #f6f7fb 100%);
+      border-bottom: 1px solid rgba(0,0,0,.08);
+    }
+    .card{
+      background: var(--app-card);
+      border: 1px solid rgba(0,0,0,.08);
+      border-radius: 14px;
+    }
+    .card .card-header{
+      background: rgba(0,0,0,.02);
+      border-bottom: 1px solid rgba(0,0,0,.06);
+      border-top-left-radius: 14px;
+      border-top-right-radius: 14px;
+      font-weight: 600;
+    }
+    .kpi{
+      border: 1px solid rgba(0,0,0,.08);
+      border-radius: 12px;
+      background: rgba(0,0,0,.02);
+      padding: .75rem;
+      height: 100%;
+    }
+    .badge-soft{
+      background: rgba(13,110,253,.10);
+      color: rgba(13,110,253,1);
+      border: 1px solid rgba(13,110,253,.20);
+    }
+    .table thead th{
+      background: rgba(0,0,0,.03);
+      border-bottom: 1px solid rgba(0,0,0,.08);
+      white-space: nowrap;
+    }
+    .sticky-actions{
+      position: sticky;
+      bottom: 0;
+      z-index: 10;
+      background: rgba(247,248,251,.92);
+      backdrop-filter: blur(6px);
+      border-top: 1px solid rgba(0,0,0,.08);
+    }
+    @media print{
+      .no-print{ display:none !important; }
+      body{ background:#fff; }
+      .card{ break-inside: avoid; }
+      .app-header{ border-bottom:none; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Header -->
+  <div class="app-header no-print">
+    <div class="container py-4">
+      <div class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-3">
+        <div>
+          <span class="badge badge-soft rounded-pill">
+            <i class="bi bi-journal-text me-1"></i> EPLE – Compte financier
+          </span>
+          <h1 class="h3 mb-1 mt-2">Assistant de préparation du rapport – Multi-onglets</h1>
+          <div class="text-muted">
+            Import OP@LE, indicateurs, contrôles, trame de rédaction, annexes & impression.
+          </div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+          <button class="btn btn-outline-primary" id="btnExportState">
+            <i class="bi bi-download me-1"></i> Télécharger le suivi (JSON)
+          </button>
+          <label class="btn btn-outline-secondary mb-0">
+            <i class="bi bi-upload me-1"></i> Charger un suivi
+            <input type="file" id="fileImportState" accept=".json" hidden>
+          </label>
+          <button class="btn btn-primary" id="btnRecalcTop">
+            <i class="bi bi-calculator me-1"></i> Recalculer
+          </button>
+        </div>
+      </div>
+
+      <div id="alertBox" class="mt-3"></div>
+
+      <!-- Tabs -->
+      <ul class="nav nav-tabs mt-3" id="mainTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" id="tab-synth" data-bs-toggle="tab" data-bs-target="#pane-synth" type="button" role="tab">
+            <i class="bi bi-speedometer2 me-1"></i> Synthèse
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="tab-ctrl" data-bs-toggle="tab" data-bs-target="#pane-ctrl" type="button" role="tab">
+            <i class="bi bi-shield-check me-1"></i> Contrôles
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="tab-redac" data-bs-toggle="tab" data-bs-target="#pane-redac" type="button" role="tab">
+            <i class="bi bi-pencil-square me-1"></i> Rédaction
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="tab-annex" data-bs-toggle="tab" data-bs-target="#pane-annex" type="button" role="tab">
+            <i class="bi bi-paperclip me-1"></i> Annexes
+          </button>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <main class="container my-4">
+    <!-- Top accordion: parameters + imports (shared for all tabs) -->
+    <div class="accordion mb-3 no-print" id="accTop">
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="hTop">
+          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#cTop" aria-expanded="true">
+            <i class="bi bi-sliders me-2"></i> Paramètres, imports OP@LE & mappings
+          </button>
+        </h2>
+        <div id="cTop" class="accordion-collapse collapse" data-bs-parent="#accTop">
+          <div class="accordion-body">
+            <div class="row g-3">
+
+              <!-- Meta -->
+              <div class="col-12 col-lg-4">
+                <div class="card h-100">
+                  <div class="card-header"><i class="bi bi-building me-2"></i>Établissement</div>
+                  <div class="card-body">
+                    <label class="form-label">Nom de l’EPLE</label>
+                    <input class="form-control" id="orgName" placeholder="Lycée / Collège …">
+                    <div class="row g-2 mt-2">
+                      <div class="col-6">
+                        <label class="form-label">Exercice</label>
+                        <input class="form-control" id="fiscalYear" placeholder="2025">
+                      </div>
+                      <div class="col-6">
+                        <label class="form-label">Date CA</label>
+                        <input type="date" class="form-control" id="dateCA">
+                      </div>
+                    </div>
+                    <hr class="my-3">
+                    <label class="form-label">Méthode “jours”</label>
+                    <select class="form-select" id="daysMethod">
+                      <option value="365" selected>Base 365</option>
+                      <option value="360">Base 360</option>
+                    </select>
+                    <div class="form-text">Jours de FdR/TN = (FdR ou TN) / charges annuelles × base.</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Imports -->
+              <div class="col-12 col-lg-8">
+                <div class="card h-100">
+                  <div class="card-header"><i class="bi bi-file-earmark-spreadsheet me-2"></i>Imports OP@LE (XLSX/CSV)</div>
+                  <div class="card-body">
+                    <div class="row g-3">
+                      <div class="col-12 col-lg-6">
+                        <label class="form-label">Balance (XLSX/CSV)</label>
+                        <input type="file" class="form-control" id="fileBalance" accept=".xlsx,.xls,.csv">
+                        <div class="form-text">Base pour charges/produits/résultat + contrôles.</div>
+                      </div>
+                      <div class="col-12 col-lg-6">
+                        <label class="form-label">État FdR/BFdR/TN (XLSX/CSV)</label>
+                        <input type="file" class="form-control" id="fileFdr" accept=".xlsx,.xls,.csv">
+                        <div class="form-text">Option : sinon saisie manuelle en Synthèse.</div>
+                      </div>
+
+                      <div class="col-12 col-lg-6">
+                        <div class="border rounded-3 p-3 bg-light">
+                          <div class="fw-semibold mb-2">Mapping Balance</div>
+                          <div class="row g-2">
+                            <div class="col-6">
+                              <label class="form-label">Compte</label>
+                              <select class="form-select" id="mapBalAccount"></select>
+                            </div>
+                            <div class="col-6">
+                              <label class="form-label">Libellé</label>
+                              <select class="form-select" id="mapBalLabel"></select>
+                            </div>
+                            <div class="col-6">
+                              <label class="form-label">Débit</label>
+                              <select class="form-select" id="mapBalDebit"></select>
+                            </div>
+                            <div class="col-6">
+                              <label class="form-label">Crédit</label>
+                              <select class="form-select" id="mapBalCredit"></select>
+                            </div>
+                            <div class="col-12">
+                              <label class="form-label">Montant net (option)</label>
+                              <select class="form-select" id="mapBalNet"></select>
+                            </div>
+                          </div>
+                          <div class="form-text mt-2">Si “net” vide : net = crédit – débit.</div>
+                        </div>
+                      </div>
+
+                      <div class="col-12 col-lg-6">
+                        <div class="border rounded-3 p-3 bg-light">
+                          <div class="fw-semibold mb-2">Mapping FdR / TN</div>
+                          <div class="row g-2">
+                            <div class="col-6">
+                              <label class="form-label">Libellé</label>
+                              <select class="form-select" id="mapFdrLabel"></select>
+                            </div>
+                            <div class="col-6">
+                              <label class="form-label">Montant</label>
+                              <select class="form-select" id="mapFdrAmount"></select>
+                            </div>
+                          </div>
+                          <div class="form-text mt-2">Repérage via mots-clés (ajustables).</div>
+                        </div>
+                      </div>
+
+                      <div class="col-12">
+                        <label class="form-label">Mots-clés de repérage (FdR / BFdR / TN)</label>
+                        <textarea class="form-control" id="rulesFdr" rows="2"
+                          placeholder="fonds de roulement, fdr; besoin en fonds de roulement, bfdr; trésorerie nette, tn"></textarea>
+                        <div class="form-text">Groupes séparés par “;”, mots séparés par “,”.</div>
+                      </div>
+
+                      <div class="col-12">
+                        <div class="d-flex flex-wrap gap-2">
+                          <button class="btn btn-outline-secondary" id="btnClearImports">
+                            <i class="bi bi-eraser me-1"></i> Effacer imports
+                          </button>
+                          <button class="btn btn-outline-primary" id="btnSaveLocal">
+                            <i class="bi bi-floppy me-1"></i> Enregistrer en local
+                          </button>
+                          <button class="btn btn-outline-secondary" id="btnLoadLocal">
+                            <i class="bi bi-arrow-clockwise me-1"></i> Recharger local
+                          </button>
+                        </div>
+                        <div class="form-text mt-2">Local = navigateur. JSON = portable.</div>
+                      </div>
+                    </div><!-- row -->
+                  </div>
+                </div>
+              </div>
+
+            </div><!-- row -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab panes -->
+    <div class="tab-content" id="mainTabsContent">
+
+      <!-- 1) SYNTHÈSE -->
+      <div class="tab-pane fade show active" id="pane-synth" role="tabpanel" aria-labelledby="tab-synth">
+        <div class="row g-3 mb-3">
+          <div class="col-12 col-lg-3">
+            <div class="kpi">
+              <div class="small text-muted">Résultat (approche simple)</div>
+              <div class="h4 mb-0" id="kpiResult">—</div>
+              <div class="form-text" id="kpiResultHint">—</div>
+            </div>
+          </div>
+          <div class="col-12 col-lg-3">
+            <div class="kpi">
+              <div class="small text-muted">CAF (placeholder)</div>
+              <div class="h4 mb-0" id="kpiCAF">—</div>
+              <div class="form-text" id="kpiCAFHint">—</div>
+            </div>
+          </div>
+          <div class="col-12 col-lg-3">
+            <div class="kpi">
+              <div class="small text-muted">Fonds de roulement (FdR)</div>
+              <div class="h4 mb-0" id="kpiFDR">—</div>
+              <div class="form-text" id="kpiFDRDays">—</div>
+            </div>
+          </div>
+          <div class="col-12 col-lg-3">
+            <div class="kpi">
+              <div class="small text-muted">Trésorerie nette (TN)</div>
+              <div class="h4 mb-0" id="kpiTN">—</div>
+              <div class="form-text" id="kpiTNDays">—</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-12 col-lg-6">
+            <div class="card h-100">
+              <div class="card-header"><i class="bi bi-speedometer2 me-2"></i>Indicateurs (auto + saisie)</div>
+              <div class="card-body">
+                <div class="row g-2">
+                  <div class="col-6">
+                    <label class="form-label">FdR (manuel si besoin)</label>
+                    <input class="form-control text-end" id="manualFdr" placeholder="0,00">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label">TN (manuel si besoin)</label>
+                    <input class="form-control text-end" id="manualTn" placeholder="0,00">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label">BFdR (manuel)</label>
+                    <input class="form-control text-end" id="manualBfdr" placeholder="0,00">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label">Charges annuelles (base jours)</label>
+                    <input class="form-control text-end" id="manualCharges" placeholder="0,00">
+                  </div>
+                </div>
+                <div class="form-text mt-2">
+                  Si la balance est importée : charges = total comptes 6 (approche simple).
+                </div>
+
+                <hr class="my-3">
+
+                <div class="table-responsive">
+                  <table class="table table-sm table-bordered align-middle mb-0" id="tblSynth">
+                    <thead>
+                      <tr>
+                        <th>Rubrique</th>
+                        <th class="text-end">Montant</th>
+                        <th>Commentaire automatique (modifiable)</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12 col-lg-6">
+            <div class="card h-100">
+              <div class="card-header"><i class="bi bi-graph-up me-2"></i>Graphique (structure)</div>
+              <div class="card-body">
+                <canvas id="chartMain" height="110"></canvas>
+                <div class="form-text mt-2">
+                  Résultat / CAF / FdR / BFdR / TN (selon imports/saisie).
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2) CONTRÔLES -->
+      <div class="tab-pane fade" id="pane-ctrl" role="tabpanel" aria-labelledby="tab-ctrl">
+        <div class="card mb-3">
+          <div class="card-header"><i class="bi bi-shield-check me-2"></i>Contrôles de cohérence</div>
+          <div class="card-body">
+            <div class="row g-2 mb-2">
+              <div class="col-12 col-lg-5">
+                <input class="form-control" id="ctlSearch" placeholder="Filtrer (mot-clé)…">
+              </div>
+              <div class="col-12 col-lg-3">
+                <select class="form-select" id="ctlSeverity">
+                  <option value="">Tous niveaux</option>
+                  <option value="INFO">Info</option>
+                  <option value="WARN">Alerte</option>
+                  <option value="ERR">Erreur</option>
+                </select>
+              </div>
+              <div class="col-12 col-lg-4 d-grid">
+                <button class="btn btn-outline-secondary" id="btnRunControls">
+                  <i class="bi bi-bug me-1"></i> Lancer les contrôles
+                </button>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Niveau</th>
+                    <th>Test</th>
+                    <th>Détail</th>
+                  </tr>
+                </thead>
+                <tbody id="ctlBody">
+                  <tr><td colspan="3" class="text-muted">Aucun contrôle lancé.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <hr class="my-3">
+
+            <!-- Quick rules editor for controls (extensible) -->
+            <div class="alert alert-light border mb-0">
+              <div class="fw-semibold mb-1"><i class="bi bi-wrench-adjustable me-1"></i>Contrôles “1.0” inclus</div>
+              <div class="small text-muted">
+                Balance absente • Charges nulles • Résultat quasi nul • FdR/TN négatifs • Indicateurs non renseignés.
+                À enrichir (401/411, restes, cohérence FdR/BFdR/TN, variations, etc.).
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3) RÉDACTION -->
+      <div class="tab-pane fade" id="pane-redac" role="tabpanel" aria-labelledby="tab-redac">
+        <div class="card mb-3">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <div><i class="bi bi-pencil-square me-2"></i>Rédaction (trame)</div>
+            <span class="badge text-bg-light border" id="chapCount">0 chapitre</span>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-12 col-lg-4 no-print">
+                <label class="form-label">Chapitres</label>
+                <div class="list-group" id="chapList"></div>
+                <div class="d-grid gap-2 mt-2">
+                  <button class="btn btn-outline-primary" id="btnAddChapter">
+                    <i class="bi bi-plus-circle me-1"></i> Ajouter un chapitre
+                  </button>
+                  <button class="btn btn-outline-secondary" id="btnResetChapters">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i> Réinitialiser trame
+                  </button>
+									<button class="btn btn-outline-secondary" id="btnRenumber">
+										<i class="bi bi-list-ol me-1"></i> RENUMÉROTER
+									</button>
+									<button class="btn btn-outline-danger" id="btnGlobalLock">
+										<i class="bi bi-shield-lock me-1"></i> MODE PRÉ-CA : OFF
+									</button>
+									<button class="btn btn-outline-primary" id="btnSign">
+										<i class="bi bi-fingerprint me-1"></i> SIGNER / HORODATER
+									</button>
+                </div>
+                <div class="form-text mt-2">
+                  Trame adaptable à ton CA (compte financier, affectation du résultat, commentaires).
+                </div>
+              </div>
+
+              <div class="col-12 col-lg-8">
+                <label class="form-label">Contenu du chapitre</label>
+                <input class="form-control mb-2" id="chapTitle" placeholder="Titre">
+                <textarea class="form-control" id="chapBody" rows="12" placeholder="Texte…"></textarea>
+
+								<div class="card mb-3 no-print">
+									<div class="card-header"><i class="bi bi-stars me-2"></i>Assistant IA (rédaction guidée)</div>
+									<div class="card-body">
+										<div class="row g-2">
+											<div class="col-12 col-lg-4">
+												<label class="form-label">Mode</label>
+												<select class="form-select" id="aiMode">
+													<option value="draft">Rédiger (nouveau texte)</option>
+													<option value="improve">Améliorer (réécrire le texte existant)</option>
+													<option value="outline">Plan (structure du chapitre)</option>
+													<option value="risks">Points de vigilance / risques</option>
+												</select>
+											</div>
+											<div class="col-12 col-lg-4">
+												<label class="form-label">Tonalité</label>
+												<select class="form-select" id="aiTone">
+													<option value="ca">Conseil d’administration (sobre)</option>
+													<option value="ac">Agent comptable (technique)</option>
+													<option value="sg">Secrétaire général (pilotage)</option>
+												</select>
+											</div>
+											<div class="col-12 col-lg-4">
+												<label class="form-label">Longueur</label>
+												<select class="form-select" id="aiLength">
+													<option value="short">Courte</option>
+													<option value="medium" selected>Moyenne</option>
+													<option value="long">Détaillée</option>
+												</select>
+											</div>
+
+											<div class="col-12">
+												<label class="form-label">Consigne spécifique (option)</label>
+												<input class="form-control" id="aiCustom" placeholder="Ex : insister sur la trésorerie, mentionner la RSE, intégrer les contrôles WARN…">
+											</div>
+
+											<div class="col-12 d-flex flex-wrap gap-2">
+												<button class="btn btn-outline-primary" id="btnAiSuggest">
+													<i class="bi bi-magic me-1"></i> Générer une proposition
+												</button>
+												<button class="btn btn-outline-secondary" id="btnAiAppend" disabled>
+													<i class="bi bi-plus-circle me-1"></i> Ajouter au chapitre
+												</button>
+												<button class="btn btn-primary" id="btnAiReplace" disabled>
+													<i class="bi bi-arrow-repeat me-1"></i> Remplacer le chapitre
+												</button>
+											</div>
+
+<!--
+											<div class="col-12">
+												<label class="form-label">Proposition IA</label>
+												<textarea class="form-control" id="aiOutput" rows="8" placeholder="La proposition s’affichera ici…" readonly></textarea>
+												<div class="form-text">
+													L’IA passe par un endpoint backend (proxy). La proposition n’est insérée que sur action explicite.
+												</div>
+											</div>
+											<div class="row g-2">
+												<div class="col-12 col-lg-6">
+													<label class="form-label">Endpoint IA (proxy)</label>
+													<input class="form-control" id="aiEndpoint" placeholder="https://ton-worker.workers.dev/api/ai">
+													<div class="form-text">Stocké en local (navigateur). Jamais de clé API ici.</div>
+												</div>
+											</div>
+-->
+										</div>
+									</div>
+								</div>
+
+                <div class="d-flex flex-wrap gap-2 mt-2 no-print">
+                  <button class="btn btn-outline-secondary" id="btnInsertAuto">
+                    <i class="bi bi-magic me-1"></i> Insérer paragraphe auto (KPI)
+                  </button>
+                  <button class="btn btn-primary" id="btnUpdateChapter">
+                    <i class="bi bi-check2-circle me-1"></i> Enregistrer le chapitre
+                  </button>
+                  <button class="btn btn-outline-danger" id="btnDeleteChapter">
+                    <i class="bi bi-trash3 me-1"></i> Supprimer
+                  </button>
+                </div>
+
+                <hr class="my-3">
+
+                <div class="no-print d-flex flex-wrap gap-2">
+                  <button class="btn btn-outline-primary" id="btnPrint">
+                    <i class="bi bi-printer me-1"></i> Imprimer / PDF
+                  </button>
+                  <button class="btn btn-outline-secondary" id="btnCopyReport">
+                    <i class="bi bi-clipboard me-1"></i> Copier le rapport (texte)
+                  </button>
+                </div>
+								<div class="card mb-4">
+									<div class="card-header"><i class="bi bi-fingerprint me-2"></i>Traçabilité</div>
+									<div class="card-body" id="traceView">
+									<div class="text-muted">Aucune signature enregistrée.</div>
+									</div>
+								</div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><i class="bi bi-file-earmark-text me-2"></i>Rapport (aperçu imprimable)</div>
+          <div class="card-body" id="reportView">
+            <div class="text-muted">Aucun contenu pour l’instant.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4) ANNEXES -->
+      <div class="tab-pane fade" id="pane-annex" role="tabpanel" aria-labelledby="tab-annex">
+        <div class="row g-3 mb-3">
+          <div class="col-12 col-lg-6">
+            <div class="card h-100">
+              <div class="card-header"><i class="bi bi-paperclip me-2"></i>Annexes – données clés (saisie)</div>
+              <div class="card-body">
+                <div class="row g-2">
+                  <div class="col-6">
+                    <label class="form-label">Effectif élèves</label>
+                    <input class="form-control text-end" id="annStudents" placeholder="0">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label">Effectif personnel</label>
+                    <input class="form-control text-end" id="annStaff" placeholder="0">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label">SRH – Nb repas servis</label>
+                    <input class="form-control text-end" id="annMeals" placeholder="0">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label">SRH – Coût denrées</label>
+                    <input class="form-control text-end" id="annFoodCost" placeholder="0,00">
+                  </div>
+                </div>
+                <div class="form-text mt-2">
+                  Objectif : alimenter une annexe “activité / indicateurs” sans dépendre d’un export.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12 col-lg-6">
+            <div class="card h-100">
+              <div class="card-header"><i class="bi bi-upload me-2"></i>Annexes – import “autre” (CSV/XLSX)</div>
+              <div class="card-body">
+                <label class="form-label">Annexe tabulaire (ex : immobilisations, restes, dettes)</label>
+                <input type="file" class="form-control" id="fileAnnex" accept=".xlsx,.xls,.csv">
+                <div class="form-text mt-2">
+                  L’annexe importée s’affiche ci-dessous (1er onglet du fichier).
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><i class="bi bi-table me-2"></i>Annexe – aperçu</div>
+          <div class="card-body">
+            <div class="table-responsive" style="max-height: 420px;">
+              <table class="table table-sm table-bordered align-middle mb-0" id="tblAnnex">
+                <thead><tr id="tblAnnexHead"></tr></thead>
+                <tbody id="tblAnnexBody">
+                  <tr><td class="text-muted">Aucune annexe importée.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="form-text mt-2">
+              Tu peux exporter le suivi JSON pour conserver cette annexe (dans la limite de taille du navigateur).
+            </div>
+          </div>
+        </div>
+		<div class="row g-3 mb-3">
+		  <div class="col-12">
+			<div class="card">
+			  <div class="card-header"><i class="bi bi-people me-2"></i>Bilan social / RSE</div>
+			  <div class="card-body">
+
+				<div class="row g-3">
+				  <!-- Répartition H/F -->
+				  <div class="col-12 col-lg-4">
+					<div class="border rounded-3 p-3 bg-light h-100">
+					  <div class="fw-semibold mb-2">Répartition H/F</div>
+
+					  <div class="row g-2">
+						<div class="col-6">
+						  <label class="form-label">Hommes (total)</label>
+						  <input class="form-control text-end" id="bsMaleTotal" placeholder="0">
+						</div>
+						<div class="col-6">
+						  <label class="form-label">Femmes (total)</label>
+						  <input class="form-control text-end" id="bsFemaleTotal" placeholder="0">
+						</div>
+					  </div>
+
+					  <hr class="my-3">
+
+					  <div class="fw-semibold mb-2">Par catégorie</div>
+					  <div class="row g-2">
+						<div class="col-6">
+						  <label class="form-label">A Hommes</label>
+						  <input class="form-control text-end" id="bsMaleA" placeholder="0">
+						</div>
+						<div class="col-6">
+						  <label class="form-label">A Femmes</label>
+						  <input class="form-control text-end" id="bsFemaleA" placeholder="0">
+						</div>
+						<div class="col-6">
+						  <label class="form-label">B Hommes</label>
+						  <input class="form-control text-end" id="bsMaleB" placeholder="0">
+						</div>
+						<div class="col-6">
+						  <label class="form-label">B Femmes</label>
+						  <input class="form-control text-end" id="bsFemaleB" placeholder="0">
+						</div>
+						<div class="col-6">
+						  <label class="form-label">C Hommes</label>
+						  <input class="form-control text-end" id="bsMaleC" placeholder="0">
+						</div>
+						<div class="col-6">
+						  <label class="form-label">C Femmes</label>
+						  <input class="form-control text-end" id="bsFemaleC" placeholder="0">
+						</div>
+					  </div>
+
+					  <div class="form-text mt-2">
+						Si tu ne veux que “A/B” et “C”, laisse B à 0.
+					  </div>
+					</div>
+				  </div>
+
+				  <!-- Masses salariales -->
+				  <div class="col-12 col-lg-4">
+					<div class="border rounded-3 p-3 bg-light h-100">
+					  <div class="fw-semibold mb-2">Masses salariales (€/an)</div>
+
+					  <label class="form-label">Total (brut chargé ou brut – à préciser)</label>
+					  <input class="form-control text-end" id="bsPayrollTotal" placeholder="0,00">
+
+					  <div class="row g-2 mt-2">
+						<div class="col-4">
+						  <label class="form-label">A</label>
+						  <input class="form-control text-end" id="bsPayrollA" placeholder="0,00">
+						</div>
+						<div class="col-4">
+						  <label class="form-label">B</label>
+						  <input class="form-control text-end" id="bsPayrollB" placeholder="0,00">
+						</div>
+						<div class="col-4">
+						  <label class="form-label">C</label>
+						  <input class="form-control text-end" id="bsPayrollC" placeholder="0,00">
+						</div>
+					  </div>
+
+					  <hr class="my-3">
+
+					  <div class="fw-semibold mb-2">Indicateurs masse</div>
+					  <div class="row g-2">
+						<div class="col-6">
+						  <label class="form-label">ETP total</label>
+						  <input class="form-control text-end" id="bsFTE" placeholder="0,0">
+						</div>
+						<div class="col-6">
+						  <label class="form-label">Masse / ETP (auto)</label>
+						  <input class="form-control text-end" id="bsPayrollPerFTE" placeholder="—" disabled>
+						</div>
+					  </div>
+
+					  <div class="form-text mt-2">
+						“Masse/ETP” = total / ETP. Utile pour lecture pluriannuelle.
+					  </div>
+					</div>
+				  </div>
+
+				  <!-- Indicateurs RSE -->
+				  <div class="col-12 col-lg-4">
+					<div class="border rounded-3 p-3 bg-light h-100">
+					  <div class="fw-semibold mb-2">Indicateurs RSE (RH)</div>
+
+					  <div class="row g-2">
+						<div class="col-6">
+						  <label class="form-label">Absentéisme (%)</label>
+						  <input class="form-control text-end" id="bsAbsRate" placeholder="0,0">
+						</div>
+						<div class="col-6">
+						  <label class="form-label">Accidents (nb)</label>
+						  <input class="form-control text-end" id="bsAccidents" placeholder="0">
+						</div>
+						<div class="col-6">
+						  <label class="form-label">Turn-over (%)</label>
+						  <input class="form-control text-end" id="bsTurnover" placeholder="0,0">
+						</div>
+						<div class="col-6">
+						  <label class="form-label">Temps partiel (%)</label>
+						  <input class="form-control text-end" id="bsPartTimeRate" placeholder="0,0">
+						</div>
+						<div class="col-6">
+						  <label class="form-label">Heures formation</label>
+						  <input class="form-control text-end" id="bsTrainingHours" placeholder="0">
+						</div>
+						<div class="col-6">
+						  <label class="form-label">Budget formation (€)</label>
+						  <input class="form-control text-end" id="bsTrainingBudget" placeholder="0,00">
+						</div>
+					  </div>
+
+					  <hr class="my-3">
+					  <label class="form-label">Commentaires QVCT / actions</label>
+					  <textarea class="form-control" id="bsQVCT" rows="3" placeholder="Actions, prévention, amélioration..."></textarea>
+					</div>
+				  </div>
+
+				  <!-- Pyramide des âges -->
+				  <div class="col-12">
+					<div class="card">
+					  <div class="card-header"><i class="bi bi-bar-chart-line me-2"></i>Pyramide des âges</div>
+					  <div class="card-body">
+						<div class="row g-3">
+						  <div class="col-12 col-lg-4">
+							<label class="form-label">Tranches & effectifs (format simple)</label>
+							<textarea class="form-control" id="bsAgeBands" rows="9"
+							  placeholder="18-24;H=1;F=3
+25-29;H=2;F=4
+30-34;H=3;F=5
+35-39;H=2;F=6
+40-44;H=2;F=4
+45-49;H=1;F=3
+50-54;H=2;F=2
+55-59;H=1;F=1
+60+;H=0;F=1"></textarea>
+							<div class="form-text">
+							  Une ligne par tranche : <span class="font-monospace">tranche;H=x;F=y</span>
+							</div>
+						  </div>
+						  <div class="col-12 col-lg-8">
+							<canvas id="chartAgePyramid" height="130"></canvas>
+							<div class="form-text mt-2">
+							  La série “Hommes” est affichée en négatif pour effet pyramide.
+							</div>
+						  </div>
+						</div>
+					  </div>
+					</div>
+				  </div>
+
+				  <!-- Graphiques complémentaires -->
+				  <div class="col-12 col-lg-6">
+					<div class="card">
+					  <div class="card-header"><i class="bi bi-pie-chart me-2"></i>H/F total & par catégorie</div>
+					  <div class="card-body">
+						<canvas id="chartGenderTotal" height="120"></canvas>
+						<hr class="my-3">
+						<canvas id="chartGenderByCat" height="120"></canvas>
+					  </div>
+					</div>
+				  </div>
+
+				  <div class="col-12 col-lg-6">
+					<div class="card">
+					  <div class="card-header"><i class="bi bi-cash-coin me-2"></i>Masse salariale par catégorie</div>
+					  <div class="card-body">
+						<canvas id="chartPayrollByCat" height="120"></canvas>
+						<div class="form-text mt-2">
+						  Lecture possible : contribution A/B/C, cohérence avec ETP et trajectoire budgétaire.
+						</div>
+					  </div>
+					</div>
+				  </div>
+
+				</div><!-- row -->
+
+			  </div>
+			</div>
+		  </div>
+		</div>
+
+      </div>
+
+    </div><!-- tab-content -->
+
+    <!-- Bottom actions -->
+    <div class="sticky-actions py-3 no-print">
+      <div class="container d-flex flex-wrap gap-2 justify-content-end">
+        <button class="btn btn-outline-secondary" id="btnResetAll">
+          <i class="bi bi-trash3 me-1"></i> Réinitialiser
+        </button>
+        <button class="btn btn-outline-primary" id="btnExportCsv">
+          <i class="bi bi-filetype-csv me-1"></i> Export CSV (balance brute)
+        </button>
+        <button class="btn btn-primary" id="btnRecalcBottom">
+          <i class="bi bi-check2-circle me-1"></i> Calculer
+        </button>
+      </div>
+    </div>
+
+    <footer class="py-4">
+      <div class="text-center small text-muted"><small id="app-version"></small></div>
+    </footer>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+/* =========================================================
+   STATE / UTILS
+========================================================= */
+const APP_VERSION = "EPLE Compte Financier – Multi-onglets 0.2.0";
+
+const FR = {
+  parseMoney(v){
+    if (v == null) return 0;
+    if (typeof v === "number") return isFinite(v) ? v : 0;
+    let s = String(v).trim();
+    if (!s) return 0;
+    s = s.replace(/\u00A0|\u202F/g, " ").replace(/[€]/g, "").trim();
+    const sign = s.startsWith("-") ? -1 : 1;
+    s = s.replace(/^[-+]/, "").trim().replace(/ /g, "").replace(",", ".");
+    const n = Number(s);
+    return isFinite(n) ? sign * n : 0;
+  },
+  fmtMoney(n){
+    const v = Number(n);
+    if (!isFinite(v)) return "—";
+    return v.toLocaleString("fr-FR", { style:"currency", currency:"EUR" });
+  }
+};
+
+function $(id){ return document.getElementById(id); }
+function escapeHtml(s){
+  return String(s ?? "")
+    .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+}
+function todayISO(){
+  const d = new Date();
+  const pad = (x)=>String(x).padStart(2,"0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+
+const state = {
+  meta: { orgName:"", fiscalYear:"", dateCA:"", daysBase:365 },
+  mappings: {
+    balance: { account:"", label:"", debit:"", credit:"", net:"" },
+    fdr: { label:"", amount:"" }
+  },
+  rules: { fdrGroups: "fonds de roulement,fdr; besoin en fonds de roulement,bfdr; trésorerie nette,tn" },
+  data: { balanceRows: [], fdrRows: [], annexRows: [] },
+  computed: { result:null, caf:null, charges:null, fdr:null, bfdr:null, tn:null, daysFdr:null, daysTn:null },
+  manual: { fdr:0, tn:0, bfdr:0, charges:0 },
+  synthNotes: { RESULT:"—", CAF:"—", FDR:"—", BFDR:"—", TN:"—" },
+  controls: [],
+  chapters: [],
+  ui: { selectedChapterId: null },
+  annexMeta: { students:null, staff:null, meals:null, foodCost:null },
+  governance: { globalLock:false, lastSignature:null },
+  bilanSocial: {
+    gender: { maleTotal:0, femaleTotal:0, maleA:0, femaleA:0, maleB:0, femaleB:0, maleC:0, femaleC:0 },
+    payroll: { total:0, A:0, B:0, C:0, fte:0 },
+    rse: { absRate:0, accidents:0, turnover:0, partTimeRate:0, trainingHours:0, trainingBudget:0, qvct:"" },
+    ageBandsText: ""
+  },
+};
+
+/* =========================================================
+   FILE HELPERS
+========================================================= */
+function isGloballyLocked(){
+  return !!state.governance?.globalLock;
+}
+function readWorkbookFromFile(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = (e)=>{
+      try{
+        const wb = XLSX.read(e.target.result, { type:"array" });
+        resolve(wb);
+      }catch(err){ reject(err); }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+function sheetToRows(wb, sheetName){
+  const name = sheetName || wb.SheetNames[0];
+  const ws = wb.Sheets[name];
+  const rows = XLSX.utils.sheet_to_json(ws, { defval:"" });
+  return { rows, sheetName:name };
+}
+function fillSelect(id, headers, preferred=""){
+  const sel = $(id);
+  if (!sel) return;
+  sel.innerHTML = "";
+  const opt0 = document.createElement("option");
+  opt0.value = ""; opt0.textContent = "—";
+  sel.appendChild(opt0);
+  headers.forEach(h=>{
+    const opt = document.createElement("option");
+    opt.value = h; opt.textContent = h;
+    sel.appendChild(opt);
+  });
+  if (preferred && headers.includes(preferred)) sel.value = preferred;
+}
+function detectPreferred(headers, patterns){
+  const lower = headers.map(h=>String(h).toLowerCase());
+  for (let i=0;i<lower.length;i++){
+    for (const re of patterns){
+      if (re.test(lower[i])) return headers[i];
+    }
+  }
+  return "";
+}
+
+function parseIntSafe(v){
+  const n = Number(String(v ?? "").replace(/\s/g,"").replace(",", "."));
+  return Number.isFinite(n) ? Math.round(n) : 0;
+}
+function parseFloatSafe(v){
+  const n = Number(String(v ?? "").replace(/\s/g,"").replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseAgeBands(text){
+  // "18-24;H=1;F=3"
+  const lines = String(text||"").split("\n").map(x=>x.trim()).filter(Boolean);
+  const bands = [];
+  for (const ln of lines){
+    const parts = ln.split(";").map(x=>x.trim());
+    const label = parts[0] || "";
+    let h = 0, f = 0;
+    for (const p of parts.slice(1)){
+      const m1 = p.match(/^H\s*=\s*(.+)$/i);
+      const m2 = p.match(/^F\s*=\s*(.+)$/i);
+      if (m1) h = parseIntSafe(m1[1]);
+      if (m2) f = parseIntSafe(m2[1]);
+    }
+    if (label) bands.push({ label, h, f });
+  }
+  return bands;
+}
+
+
+/* =========================================================
+   IMPORTS
+========================================================= */
+async function handleBalanceImport(file){
+  const wb = await readWorkbookFromFile(file);
+  const { rows } = sheetToRows(wb);
+  state.data.balanceRows = rows;
+
+  const headers = rows.length ? Object.keys(rows[0]) : [];
+  const prefAcc = state.mappings.balance.account || detectPreferred(headers,[/compte/,/account/]);
+  const prefLab = state.mappings.balance.label  || detectPreferred(headers,[/libell/,/intitul/,/designation/]);
+  const prefDeb = state.mappings.balance.debit  || detectPreferred(headers,[/debit/]);
+  const prefCre = state.mappings.balance.credit || detectPreferred(headers,[/credit/]);
+  const prefNet = state.mappings.balance.net    || detectPreferred(headers,[/solde/,/net/,/montant/]);
+
+  fillSelect("mapBalAccount", headers, prefAcc);
+  fillSelect("mapBalLabel", headers, prefLab);
+  fillSelect("mapBalDebit", headers, prefDeb);
+  fillSelect("mapBalCredit", headers, prefCre);
+  fillSelect("mapBalNet", headers, prefNet);
+}
+async function handleFdrImport(file){
+  const wb = await readWorkbookFromFile(file);
+  const { rows } = sheetToRows(wb);
+  state.data.fdrRows = rows;
+
+  const headers = rows.length ? Object.keys(rows[0]) : [];
+  const prefLab = state.mappings.fdr.label  || detectPreferred(headers,[/libell/,/intitul/,/designation/]);
+  const prefAmt = state.mappings.fdr.amount || detectPreferred(headers,[/montant/,/valeur/,/total/,/net/]);
+
+  fillSelect("mapFdrLabel", headers, prefLab);
+  fillSelect("mapFdrAmount", headers, prefAmt);
+}
+async function handleAnnexImport(file){
+  const wb = await readWorkbookFromFile(file);
+  const { rows } = sheetToRows(wb);
+  state.data.annexRows = rows;
+  renderAnnexTable();
+  saveLocalMaybe();
+}
+
+function buildChapterContext(){
+  const chId = state.ui.selectedChapterId;
+  const ch = state.chapters.find(x=>x.id===chId) || { title:"", body:"" };
+
+  // Résumé KPI
+  const k = state.computed || {};
+  const kpi = {
+    result: k.result,
+    caf: k.caf,
+    fdr: k.fdr,
+    bfdr: k.bfdr,
+    tn: k.tn,
+    daysFdr: k.daysFdr,
+    daysTn: k.daysTn
+  };
+
+  // Contrôles (on ne prend pas tout si énorme)
+  const controls = (state.controls || []).slice(0, 20);
+
+  // Bilan social RSE (si présent)
+  const bs = state.bilanSocial || null;
+
+  return {
+    meta: {
+      orgName: state.meta.orgName || "EPLE",
+      fiscalYear: state.meta.fiscalYear || "",
+      dateCA: state.meta.dateCA || ""
+    },
+    chapter: {
+      title: ch.title || "",
+      body: ch.body || ""
+    },
+    kpi,
+    synthNotes: state.synthNotes || {},
+    controls,
+    bilanSocial: bs
+  };
+}
+
+function buildAiRequest(){
+  const mode = $("aiMode")?.value || "draft";
+  const tone = $("aiTone")?.value || "ca";
+  const length = $("aiLength")?.value || "medium";
+  const custom = $("aiCustom")?.value || "";
+
+  const ctx = buildChapterContext();
+
+  return {
+    mode, tone, length, custom,
+    context: ctx
+  };
+}
+
+async function callAiProxy(payload){
+  // Endpoint de ton choix. Exemple: un petit serveur Node/Express ou une fonction serverless.
+  const res = await fetch("/api/ai/chapitre", {
+    method: "POST",
+    headers: { "Content-Type":"application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok){
+    const t = await res.text().catch(()=> "");
+    throw new Error(`Proxy IA en erreur (${res.status}). ${t}`);
+  }
+
+  return await res.json(); // { text: "..." }
+}
+
+function buildSignaturePayload(){
+  // On signe uniquement ce qui doit être stable et “métier”
+  // (évite les champs UI temporaires)
+  return {
+    meta: {
+      orgName: state.meta.orgName || "",
+      fiscalYear: state.meta.fiscalYear || "",
+      dateCA: state.meta.dateCA || ""
+    },
+    computed: {
+      result: state.computed.result,
+      caf: state.computed.caf,
+      charges: state.computed.charges,
+      fdr: state.computed.fdr,
+      bfdr: state.computed.bfdr,
+      tn: state.computed.tn,
+      daysFdr: state.computed.daysFdr,
+      daysTn: state.computed.daysTn
+    },
+    synthNotes: state.synthNotes,
+    chapters: (state.chapters || []).map(ch=>({
+      title: ch.title || "",
+      body: ch.body || "",
+      locked: !!ch.locked
+    })),
+    annexMeta: state.annexMeta || null
+  };
+}
+
+// JSON stable “simple”: stringify d’un objet déjà déterministe (ordre de clés fixe ci-dessus).
+function toStableJSON(obj){
+  return JSON.stringify(obj);
+}
+
+async function sha256Hex(text){
+  const enc = new TextEncoder();
+  const data = enc.encode(text);
+  const hashBuf = await crypto.subtle.digest("SHA-256", data);
+  const hashArr = Array.from(new Uint8Array(hashBuf));
+  return hashArr.map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+
+async function signAndTimestamp(){
+  const payload = buildSignaturePayload();
+  const stable = toStableJSON(payload);
+  const hash = await sha256Hex(stable);
+  const tsISO = new Date().toISOString();
+
+  state.governance.lastSignature = {
+    tsISO,
+    hash,
+    scope: "meta+computed+synthNotes+chapters+annexMeta"
+  };
+
+  renderTraceView();
+  saveLocalMaybe();
+}
+
+function renderTraceView(){
+  const v = $("traceView");
+  if (!v) return;
+
+  const sig = state.governance?.lastSignature;
+  if (!sig){
+    v.innerHTML = `<div class="text-muted">Aucune signature enregistrée.</div>`;
+    return;
+  }
+
+  // Format “humain”
+  const dt = new Date(sig.tsISO);
+  const fr = isFinite(dt) ? dt.toLocaleString("fr-FR") : sig.tsISO;
+
+  v.innerHTML = `
+    <div class="mb-2">
+      <div class="fw-semibold">Signature du rapport</div>
+      <div class="text-muted small">Horodatage : ${escapeHtml(fr)} (ISO : ${escapeHtml(sig.tsISO)})</div>
+    </div>
+
+    <div class="mb-2">
+      <div class="small text-muted">Empreinte SHA-256</div>
+      <div class="font-monospace" style="word-break:break-all">${escapeHtml(sig.hash)}</div>
+    </div>
+
+    <div class="small text-muted">
+      Périmètre : ${escapeHtml(sig.scope || "—")}
+    </div>
+
+    <hr class="my-3">
+
+    <div class="alert alert-light border mb-0">
+      <div class="fw-semibold"><i class="bi bi-info-circle me-1"></i>Usage “CA / audit”</div>
+      <div class="small text-muted">
+        Conserve cette empreinte avec le PDF du rapport. Toute modification du contenu signé change l’empreinte.
+      </div>
+    </div>
+  `;
+}
+
+
+/* =========================================================
+   COMPUTATION (approche simple, robuste)
+========================================================= */
+function getDaysBase(){
+  const v = $("daysMethod")?.value || String(state.meta.daysBase || 365);
+  return v === "360" ? 360 : 365;
+}
+function computeFromBalance(){
+  const rows = state.data.balanceRows || [];
+  if (!rows.length) return { result:null, charges:null, hints:["Balance non importée."] };
+
+  const m = state.mappings.balance = {
+    account: $("mapBalAccount")?.value || "",
+    label: $("mapBalLabel")?.value || "",
+    debit: $("mapBalDebit")?.value || "",
+    credit:$("mapBalCredit")?.value || "",
+    net:   $("mapBalNet")?.value || ""
+  };
+
+  const accKey = m.account;
+  if (!accKey) return { result:null, charges:null, hints:["Mapping balance: “Compte” manquant."] };
+
+  let sumCharges = 0, sumProducts = 0;
+  let any6 = false, any7 = false;
+
+  rows.forEach(r=>{
+    const acc = String(r[accKey] ?? "").trim();
+    if (!acc) return;
+    const first = acc.replace(/\D/g,"").slice(0,1);
+
+    let net = 0;
+    if (m.net){
+      net = FR.parseMoney(r[m.net]);
+    } else {
+      const deb = m.debit ? FR.parseMoney(r[m.debit]) : 0;
+      const cre = m.credit ? FR.parseMoney(r[m.credit]) : 0;
+      net = cre - deb;
+    }
+
+    if (first === "6"){
+      any6 = true;
+      sumCharges += Math.abs(net);
+    }
+    if (first === "7"){
+      any7 = true;
+      sumProducts += Math.abs(net);
+    }
+  });
+
+  const result = (any7 ? sumProducts : 0) - (any6 ? sumCharges : 0);
+  const charges = any6 ? sumCharges : null;
+
+  const hints = [];
+  if (!any6) hints.push("Aucun compte de classe 6 détecté (charges).");
+  if (!any7) hints.push("Aucun compte de classe 7 détecté (produits).");
+
+  return { result, charges, hints };
+}
+
+function parseGroups(text){
+  const groups = String(text||"").split(";").map(g=>g.trim()).filter(Boolean);
+  return groups.map(g=>g.split(",").map(x=>x.trim()).filter(Boolean));
+}
+function findInFdrRows(labelKey, amountKey, groups){
+  const out = { fdr:null, bfdr:null, tn:null };
+  const rows = state.data.fdrRows || [];
+  if (!rows.length || !labelKey || !amountKey) return out;
+
+  const hay = (s)=>String(s||"").toLowerCase();
+  rows.forEach(r=>{
+    const lab = hay(r[labelKey]);
+    const amt = FR.parseMoney(r[amountKey]);
+    if (groups[0]?.some(k=>lab.includes(k.toLowerCase()))) out.fdr = amt;
+    if (groups[1]?.some(k=>lab.includes(k.toLowerCase()))) out.bfdr = amt;
+    if (groups[2]?.some(k=>lab.includes(k.toLowerCase()))) out.tn = amt;
+  });
+  return out;
+}
+
+function computeAll(){
+  // meta
+  state.meta.orgName = $("orgName")?.value || "";
+  state.meta.fiscalYear = $("fiscalYear")?.value || "";
+  state.meta.dateCA = $("dateCA")?.value || "";
+  state.meta.daysBase = getDaysBase();
+
+  // rules
+  state.rules.fdrGroups = $("rulesFdr")?.value || state.rules.fdrGroups;
+
+  // manual inputs
+  state.manual.fdr = FR.parseMoney($("manualFdr")?.value);
+  state.manual.tn = FR.parseMoney($("manualTn")?.value);
+  state.manual.bfdr = FR.parseMoney($("manualBfdr")?.value);
+  state.manual.charges = FR.parseMoney($("manualCharges")?.value);
+
+  // annex meta
+  state.annexMeta.students = Number(($("annStudents")?.value || "").replace(/\s/g,"")) || null;
+  state.annexMeta.staff    = Number(($("annStaff")?.value || "").replace(/\s/g,"")) || null;
+  state.annexMeta.meals    = Number(($("annMeals")?.value || "").replace(/\s/g,"")) || null;
+  state.annexMeta.foodCost = FR.parseMoney($("annFoodCost")?.value);
+
+  // compute balance
+  const bal = computeFromBalance();
+
+  // fdr import selection
+  state.mappings.fdr = {
+    label: $("mapFdrLabel")?.value || "",
+    amount:$("mapFdrAmount")?.value || ""
+  };
+  const groups = parseGroups(state.rules.fdrGroups);
+  const fdrFound = findInFdrRows(state.mappings.fdr.label, state.mappings.fdr.amount, groups);
+
+  const fdr = (fdrFound.fdr != null) ? fdrFound.fdr : (state.manual.fdr || null);
+  const tn  = (fdrFound.tn  != null) ? fdrFound.tn  : (state.manual.tn  || null);
+  const bfdr= (fdrFound.bfdr!= null) ? fdrFound.bfdr: (state.manual.bfdr|| null);
+
+  const charges = (bal.charges != null) ? bal.charges : (state.manual.charges || null);
+
+  // CAF (placeholder) : à enrichir (dotations/reprises)
+  const result = bal.result;
+  const caf = (result != null) ? result : null;
+
+  const daysBase = state.meta.daysBase || 365;
+  const daysFdr = (fdr != null && charges && charges !== 0) ? (fdr / charges) * daysBase : null;
+  const daysTn  = (tn  != null && charges && charges !== 0) ? (tn  / charges) * daysBase : null;
+
+
+  state.computed = { result, caf, charges, fdr, bfdr, tn, daysFdr, daysTn };
+
+  renderKPIs(bal.hints || []);
+  buildSynthTable();
+  renderChart();
+  runControls();
+  rebuildReportView();
+  saveLocalMaybe();
+
+	// ---- Bilan social / RSE ----
+	if (!state.bilanSocial) state.bilanSocial = {
+		gender:{}, payroll:{}, rse:{}, ageBandsText:""
+	};
+
+	state.bilanSocial.gender = {
+		maleTotal: parseIntSafe($("bsMaleTotal")?.value),
+		femaleTotal: parseIntSafe($("bsFemaleTotal")?.value),
+		maleA: parseIntSafe($("bsMaleA")?.value),
+		femaleA: parseIntSafe($("bsFemaleA")?.value),
+		maleB: parseIntSafe($("bsMaleB")?.value),
+		femaleB: parseIntSafe($("bsFemaleB")?.value),
+		maleC: parseIntSafe($("bsMaleC")?.value),
+		femaleC: parseIntSafe($("bsFemaleC")?.value)
+	};
+
+	state.bilanSocial.payroll = {
+		total: FR.parseMoney($("bsPayrollTotal")?.value),
+		A: FR.parseMoney($("bsPayrollA")?.value),
+		B: FR.parseMoney($("bsPayrollB")?.value),
+		C: FR.parseMoney($("bsPayrollC")?.value),
+		fte: parseFloatSafe($("bsFTE")?.value)
+	};
+
+	state.bilanSocial.rse = {
+		absRate: parseFloatSafe($("bsAbsRate")?.value),
+		accidents: parseIntSafe($("bsAccidents")?.value),
+		turnover: parseFloatSafe($("bsTurnover")?.value),
+		partTimeRate: parseFloatSafe($("bsPartTimeRate")?.value),
+		trainingHours: parseIntSafe($("bsTrainingHours")?.value),
+		trainingBudget: FR.parseMoney($("bsTrainingBudget")?.value),
+		qvct: $("bsQVCT")?.value || ""
+	};
+
+	state.bilanSocial.ageBandsText = $("bsAgeBands")?.value || "";
+
+	// auto calcul masse/ETP
+	const fte = state.bilanSocial.payroll.fte;
+	const total = state.bilanSocial.payroll.total;
+	$("bsPayrollPerFTE").value = (fte && total) ? FR.fmtMoney(total / fte) : "—";
+
+	renderBilanSocialCharts();
+
+}
+
+/* =========================================================
+   RENDERING
+========================================================= */
+function renderAlert(kind, title, msg){
+  const box = $("alertBox");
+  if (!box) return;
+  const cls = kind === "danger" ? "alert-danger" : kind === "warning" ? "alert-warning" : "alert-info";
+  box.innerHTML = `
+    <div class="alert ${cls} border mb-0">
+      <div class="fw-semibold"><i class="bi bi-info-circle-fill me-2"></i>${escapeHtml(title)}</div>
+      <div class="mt-1">${escapeHtml(msg)}</div>
+    </div>`;
+}
+function renderKPIs(hints){
+  const { result, caf, fdr, tn, daysFdr, daysTn } = state.computed;
+
+  $("kpiResult").textContent = result==null ? "—" : FR.fmtMoney(result);
+  $("kpiCAF").textContent    = caf==null ? "—" : FR.fmtMoney(caf);
+  $("kpiFDR").textContent    = fdr==null ? "—" : FR.fmtMoney(fdr);
+  $("kpiTN").textContent     = tn==null ? "—" : FR.fmtMoney(tn);
+
+  $("kpiFDRDays").textContent = daysFdr==null ? "—" : `${daysFdr.toFixed(1)} jours`;
+  $("kpiTNDays").textContent  = daysTn==null ? "—" : `${daysTn.toFixed(1)} jours`;
+
+  const problems = [];
+  if (hints?.length) problems.push(...hints);
+  if (state.data.balanceRows?.length === 0) problems.push("Aucune balance importée.");
+  if (state.computed.fdr != null && state.computed.fdr < 0) problems.push("FdR négatif (surveillance).");
+  if (state.computed.tn  != null && state.computed.tn  < 0) problems.push("TN négative (tension).");
+
+  if (problems.length){
+    renderAlert("warning", "Points d’attention", problems.slice(0,3).join(" • "));
+  } else {
+    $("alertBox").innerHTML = "";
+  }
+
+  $("kpiResultHint").textContent = result==null ? "Importer la balance pour calculer." : "Produits (7) – charges (6).";
+  $("kpiCAFHint").textContent = caf==null ? "CAF non calculée." : "CAF simplifiée (à enrichir).";
+}
+
+function buildSynthTable(){
+  const tb = $("tblSynth").querySelector("tbody");
+  tb.innerHTML = "";
+
+  const rows = [
+    { k:"RESULT", label:"Résultat", val: state.computed.result, auto: autoTextResult() },
+    { k:"CAF",    label:"CAF (simplifiée)", val: state.computed.caf, auto: autoTextCAF() },
+    { k:"FDR",    label:"Fonds de roulement (FdR)", val: state.computed.fdr, auto: autoTextFDR() },
+    { k:"BFDR",   label:"Besoin en fonds de roulement (BFdR)", val: state.computed.bfdr, auto: autoTextBFDR() },
+    { k:"TN",     label:"Trésorerie nette (TN)", val: state.computed.tn, auto: autoTextTN() }
+  ];
+
+  rows.forEach(r=>{
+    if (!state.synthNotes[r.k] || state.synthNotes[r.k] === "—") state.synthNotes[r.k] = r.auto;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(r.label)}</td>
+      <td class="text-end">${r.val==null ? "—" : FR.fmtMoney(r.val)}</td>
+      <td><input class="form-control form-control-sm" data-k="${r.k}" value="${escapeHtml(state.synthNotes[r.k] || "")}"></td>
+    `;
+    tb.appendChild(tr);
+  });
+
+  tb.querySelectorAll("input[data-k]").forEach(inp=>{
+    inp.addEventListener("change", ()=>{
+      const k = inp.getAttribute("data-k");
+      state.synthNotes[k] = inp.value;
+      rebuildReportView();
+      saveLocalMaybe();
+    });
+  });
+}
+
+let chartMain = null;
+let chartAgePyramid = null;
+let chartGenderTotal = null;
+let chartGenderByCat = null;
+let chartPayrollByCat = null;
+
+function renderChart(){
+  const c = $("chartMain");
+  if (!c || typeof Chart === "undefined") return;
+
+  const { result, caf, fdr, bfdr, tn } = state.computed;
+  const labels = ["Résultat","CAF","FdR","BFdR","TN"];
+  const values = [result ?? 0, caf ?? 0, fdr ?? 0, bfdr ?? 0, tn ?? 0];
+
+  if (chartMain) chartMain.destroy();
+  chartMain = new Chart(c, {
+    type:"bar",
+    data:{ labels, datasets:[{ label:"Montants", data: values }] },
+    options:{
+      responsive:true,
+      plugins:{
+        legend:{ position:"bottom" },
+        tooltip:{ callbacks:{ label:(ctx)=> FR.fmtMoney(ctx.raw) } }
+      },
+      scales:{ y:{ ticks:{ callback:(v)=> FR.fmtMoney(v) } } }
+    }
+  });
+}
+
+function renderBilanSocialCharts(){
+  if (typeof Chart === "undefined") return;
+
+  const g = state.bilanSocial?.gender || {};
+  const p = state.bilanSocial?.payroll || {};
+  const r = state.bilanSocial?.rse || {};
+
+  // 1) Pyramide des âges
+  const bands = parseAgeBands(state.bilanSocial?.ageBandsText || "");
+  const labels = bands.map(x=>x.label);
+  const males = bands.map(x=>-Math.abs(x.h));  // négatif pour effet pyramide
+  const females = bands.map(x=>Math.abs(x.f));
+
+  const c1 = $("chartAgePyramid");
+  if (c1){
+    if (chartAgePyramid) chartAgePyramid.destroy();
+    chartAgePyramid = new Chart(c1, {
+      type:"bar",
+      data:{
+        labels,
+        datasets:[
+          { label:"Hommes", data:males, stack:"s1" },
+          { label:"Femmes", data:females, stack:"s1" }
+        ]
+      },
+      options:{
+        responsive:true,
+        indexAxis:"y",
+        plugins:{
+          legend:{ position:"bottom" },
+          tooltip:{ callbacks:{ label:(ctx)=> `${ctx.dataset.label}: ${Math.abs(ctx.raw)}` } }
+        },
+        scales:{
+          x:{ ticks:{ callback:(v)=> Math.abs(v) } }
+        }
+      }
+    });
+  }
+
+  // 2) H/F total
+  const c2 = $("chartGenderTotal");
+  if (c2){
+    if (chartGenderTotal) chartGenderTotal.destroy();
+    chartGenderTotal = new Chart(c2, {
+      type:"doughnut",
+      data:{
+        labels:["Hommes","Femmes"],
+        datasets:[{ data:[g.maleTotal||0, g.femaleTotal||0] }]
+      },
+      options:{ responsive:true, plugins:{ legend:{ position:"bottom" } } }
+    });
+  }
+
+  // 3) H/F par catégorie (barres empilées)
+  const c3 = $("chartGenderByCat");
+  if (c3){
+    if (chartGenderByCat) chartGenderByCat.destroy();
+    chartGenderByCat = new Chart(c3, {
+      type:"bar",
+      data:{
+        labels:["A","B","C"],
+        datasets:[
+          { label:"Hommes", data:[g.maleA||0, g.maleB||0, g.maleC||0], stack:"s2" },
+          { label:"Femmes", data:[g.femaleA||0, g.femaleB||0, g.femaleC||0], stack:"s2" }
+        ]
+      },
+      options:{ responsive:true, plugins:{ legend:{ position:"bottom" } } }
+    });
+  }
+
+  // 4) Masse salariale par catégorie
+  const c4 = $("chartPayrollByCat");
+  if (c4){
+    if (chartPayrollByCat) chartPayrollByCat.destroy();
+    chartPayrollByCat = new Chart(c4, {
+      type:"bar",
+      data:{
+        labels:["A","B","C"],
+        datasets:[{ label:"Masse salariale", data:[p.A||0, p.B||0, p.C||0] }]
+      },
+      options:{
+        responsive:true,
+        plugins:{
+          legend:{ position:"bottom" },
+          tooltip:{ callbacks:{ label:(ctx)=> FR.fmtMoney(ctx.raw) } }
+        },
+        scales:{ y:{ ticks:{ callback:(v)=> FR.fmtMoney(v) } } }
+      }
+    });
+  }
+}
+
+/* =========================================================
+   CONTROLS
+========================================================= */
+function runControls(){
+  const { result, charges, fdr, tn } = state.computed;
+  const controls = [];
+  const push = (sev, test, detail)=> controls.push({ sev, test, detail });
+
+  if (!state.data.balanceRows?.length) push("ERR","Balance absente","Importer une balance pour fiabiliser résultat/charges.");
+  if (charges == null || charges === 0) push("WARN","Charges annuelles","Charges nulles/non calculées : vérifier mapping ou saisir manuellement.");
+  if (result != null && Math.abs(result) < 1) push("INFO","Résultat proche de zéro","Vérifier si normal (équilibre) ou mapping.");
+  if (fdr != null && fdr < 0) push("WARN","FdR négatif","Analyser structure et trajectoire pluriannuelle.");
+  if (tn  != null && tn  < 0) push("WARN","TN négative","Examiner restes à recouvrer, échéancier, décaissements.");
+  if (state.data.fdrRows?.length === 0 && (!state.manual.fdr && !state.manual.tn)) push("INFO","Indicateurs FdR/TN","Importer l’état ou saisir manuellement.");
+
+  state.controls = controls;
+  renderControls();
+}
+function renderControls(){
+  const body = $("ctlBody");
+  const q = ($("ctlSearch")?.value || "").toLowerCase();
+  const sev = $("ctlSeverity")?.value || "";
+
+  let list = state.controls || [];
+  if (sev) list = list.filter(x=>x.sev === sev);
+  if (q) list = list.filter(x=>(`${x.test} ${x.detail}`).toLowerCase().includes(q));
+
+  body.innerHTML = "";
+  if (!list.length){
+    body.innerHTML = `<tr><td colspan="3" class="text-muted">Aucun contrôle.</td></tr>`;
+    return;
+  }
+  list.forEach(c=>{
+    const badge = c.sev==="ERR" ? "text-bg-danger" : c.sev==="WARN" ? "text-bg-warning" : "text-bg-light border text-dark";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><span class="badge ${badge}">${escapeHtml(c.sev)}</span></td>
+      <td>${escapeHtml(c.test)}</td>
+      <td>${escapeHtml(c.detail)}</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+/* =========================================================
+   RÉDACTION
+========================================================= */
+function defaultChapters(){
+  return [
+    { id: crypto.randomUUID(), title: "1. Présentation générale", body: "Contexte de l’exercice, faits marquants, éléments de périmètre.", locked:false },
+    { id: crypto.randomUUID(), title: "2. Exécution budgétaire", body: "Analyse des écarts, points structurants recettes/dépenses, mesures correctrices.", locked:false },
+    { id: crypto.randomUUID(), title: "3. Situation financière", body: "Résultat, CAF, FdR, BFdR, TN : lecture et tendances.", locked:false },
+    { id: crypto.randomUUID(), title: "4. Points de vigilance", body: "Risques identifiés, contrôles, recommandations et plan d’action.", locked:false },
+    { id: crypto.randomUUID(), title: "5. Proposition d’affectation du résultat", body: "Projet d’affectation et justification.", locked:true }
+  ];
+}
+function rebuildChapterList(){
+  ensureChapterShape();
+
+  const gLocked = isGloballyLocked();
+  const list = $("chapList");
+  list.innerHTML = "";
+
+  state.chapters.forEach((ch, idx)=>{
+    const row = document.createElement("div");
+    row.className = "d-flex align-items-center gap-1 mb-1";
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "list-group-item list-group-item-action flex-grow-1";
+    btn.textContent = ch.title || "(Sans titre)";
+    btn.onclick = ()=>selectChapter(ch.id);
+
+    // badge verrou
+    const lockBadge = document.createElement("span");
+    lockBadge.className = "badge text-bg-light border";
+    lockBadge.title = ch.locked ? "Chapitre verrouillé" : "Chapitre modifiable";
+    lockBadge.innerHTML = ch.locked ? '<i class="bi bi-lock-fill"></i>' : '<i class="bi bi-unlock"></i>';
+
+    const up = document.createElement("button");
+    up.className = "btn btn-sm btn-outline-secondary";
+    up.innerHTML = "▲";
+    up.disabled = idx === 0 || ch.locked || gLocked;
+    up.title = ch.locked ? "Verrouillé" : "Monter";
+    up.onclick = ()=>moveChapter(idx, -1);
+
+    const down = document.createElement("button");
+    down.className = "btn btn-sm btn-outline-secondary";
+    down.innerHTML = "▼";
+    down.disabled = idx === state.chapters.length - 1 || ch.locked || gLocked;
+    down.title = ch.locked ? "Verrouillé" : "Descendre";
+    down.onclick = ()=>moveChapter(idx, +1);
+
+    const toggleLock = document.createElement("button");
+    toggleLock.className = "btn btn-sm btn-outline-secondary";
+    toggleLock.title = ch.locked ? "Déverrouiller" : "Verrouiller";
+	toggleLock.disabled = gLocked;
+    toggleLock.innerHTML = ch.locked ? '<i class="bi bi-unlock"></i>' : '<i class="bi bi-lock"></i>';
+    toggleLock.onclick = ()=>{
+      ch.locked = !ch.locked;
+      rebuildChapterList();
+      saveLocalMaybe();
+    };
+
+    row.appendChild(btn);
+    row.appendChild(lockBadge);
+    row.appendChild(up);
+    row.appendChild(down);
+    row.appendChild(toggleLock);
+    list.appendChild(row);
+  });
+
+  $("chapCount").textContent = `${state.chapters.length} chapitre(s)`;
+}
+function selectChapter(id){
+  state.ui.selectedChapterId = id;
+  const ch = state.chapters.find(x=>x.id===id);
+  if (!ch) return;
+  $("chapTitle").value = ch.title || "";
+  $("chapBody").value = ch.body || "";
+}
+function updateSelectedChapter(){
+  if (isGloballyLocked()) return;
+  const id = state.ui.selectedChapterId;
+  if (!id) return;
+  const ch = state.chapters.find(x=>x.id===id);
+  if (!ch) return;
+  ch.title = $("chapTitle").value || "";
+  ch.body  = $("chapBody").value  || "";
+  rebuildChapterList();
+  rebuildReportView();
+  saveLocalMaybe();
+}
+function deleteSelectedChapter(){
+  if (isGloballyLocked()) return;
+  ensureChapterShape();
+
+  const id = state.ui.selectedChapterId;
+  if (!id) return;
+
+  const ch = state.chapters.find(x=>x.id===id);
+  if (ch?.locked){
+    alert("Ce chapitre est verrouillé et ne peut pas être supprimé.");
+    return;
+  }
+
+  state.chapters = state.chapters.filter(x=>x.id!==id);
+
+  renumberChapters();
+
+  state.ui.selectedChapterId = state.chapters[0]?.id || null;
+  rebuildChapterList();
+
+  if (state.ui.selectedChapterId) selectChapter(state.ui.selectedChapterId);
+  else { $("chapTitle").value=""; $("chapBody").value=""; }
+
+  rebuildReportView();
+  saveLocalMaybe();
+}
+function insertAutoParagraph(){
+  const para = [
+    `Sur l’exercice ${state.meta.fiscalYear || "—"}, l’exécution fait apparaître un résultat de ${state.computed.result==null?"—":FR.fmtMoney(state.computed.result)}.`,
+    `La CAF (approche simplifiée) ressort à ${state.computed.caf==null?"—":FR.fmtMoney(state.computed.caf)}.`,
+    `Le fonds de roulement s’établit à ${state.computed.fdr==null?"—":FR.fmtMoney(state.computed.fdr)} (${state.computed.daysFdr==null?"—":state.computed.daysFdr.toFixed(1)+" jours"}).`,
+    `La trésorerie nette s’établit à ${state.computed.tn==null?"—":FR.fmtMoney(state.computed.tn)} (${state.computed.daysTn==null?"—":state.computed.daysTn.toFixed(1)+" jours"}).`
+  ].join(" ");
+  const t = $("chapBody");
+  t.value = (t.value ? t.value + "\n\n" : "") + para;
+}
+function moveChapter(index, direction){
+  if (isGloballyLocked()) return;
+  ensureChapterShape();
+
+  const ch = state.chapters[index];
+  if (ch?.locked) return;
+
+  const newIndex = index + direction;
+  if (newIndex < 0 || newIndex >= state.chapters.length) return;
+
+  // Si la cible est verrouillée, on interdit aussi
+  if (state.chapters[newIndex]?.locked) return;
+
+  const tmp = state.chapters[index];
+  state.chapters[index] = state.chapters[newIndex];
+  state.chapters[newIndex] = tmp;
+
+  renumberChapters();
+
+  state.ui.selectedChapterId = state.chapters[newIndex].id;
+
+  rebuildChapterList();
+  selectChapter(state.ui.selectedChapterId);
+  rebuildReportView();
+  saveLocalMaybe();
+}
+function ensureChapterShape(){
+  // Compatibilité avec anciens suivis (sans locked)
+  state.chapters.forEach(ch=>{
+    if (typeof ch.locked !== "boolean") ch.locked = false;
+  });
+}
+
+function renumberChapters(){
+  // Renumérote seulement si le titre commence déjà par "n." OU si tu veux forcer.
+  // Ici: on FORCE une numérotation 1..N au début du titre, en conservant le libellé.
+  state.chapters.forEach((ch, idx)=>{
+    const base = (ch.title || "").replace(/^\s*\d+\.\s*/, "").trim();
+    ch.title = `${idx+1}. ${base || "Sans titre"}`;
+  });
+}
+
+function buildBilanSocialHtml(){
+  const bs = state.bilanSocial;
+  if (!bs) return "";
+
+  const g = bs.gender || {};
+  const p = bs.payroll || {};
+  const r = bs.rse || {};
+
+  const totalStaff = (g.maleTotal||0) + (g.femaleTotal||0);
+  const perFTE = (p.fte && p.total) ? FR.fmtMoney(p.total / p.fte) : "—";
+
+  return `
+    <div class="mb-4">
+      <div class="h5">Annexe – Bilan social / RSE</div>
+      <ul class="mb-2">
+        <li>Effectif (déclaratif) : <span class="fw-semibold">${totalStaff}</span> (H ${g.maleTotal||0} / F ${g.femaleTotal||0})</li>
+        <li>Répartition par catégorie :
+          A (H ${g.maleA||0} / F ${g.femaleA||0}) •
+          B (H ${g.maleB||0} / F ${g.femaleB||0}) •
+          C (H ${g.maleC||0} / F ${g.femaleC||0})
+        </li>
+        <li>Masse salariale totale : <span class="fw-semibold">${p.total ? escapeHtml(FR.fmtMoney(p.total)) : "—"}</span>
+          (A ${p.A?escapeHtml(FR.fmtMoney(p.A)):"—"} / B ${p.B?escapeHtml(FR.fmtMoney(p.B)):"—"} / C ${p.C?escapeHtml(FR.fmtMoney(p.C)):"—"})
+        </li>
+        <li>ETP : ${p.fte ?? "—"} • Masse/ETP : ${escapeHtml(perFTE)}</li>
+        <li>Absentéisme : ${r.absRate ?? "—"}% • Accidents : ${r.accidents ?? "—"} • Turn-over : ${r.turnover ?? "—"}% • Temps partiel : ${r.partTimeRate ?? "—"}%</li>
+        <li>Formation : ${r.trainingHours ?? "—"} h • Budget : ${r.trainingBudget ? escapeHtml(FR.fmtMoney(r.trainingBudget)) : "—"}</li>
+      </ul>
+      ${r.qvct ? `<div style="white-space:pre-wrap"><span class="fw-semibold">QVCT / actions :</span>\n${escapeHtml(r.qvct)}</div>` : ``}
+    </div>
+  `;
+}
+
+function rebuildReportView(){
+  const v = $("reportView");
+  if (!state.chapters.length){
+    v.innerHTML = `<div class="text-muted">Aucun contenu pour l’instant.</div>`;
+    return;
+  }
+
+  const annexLine = [];
+  if (state.annexMeta.students) annexLine.push(`Élèves : ${state.annexMeta.students}`);
+  if (state.annexMeta.staff) annexLine.push(`Personnel : ${state.annexMeta.staff}`);
+  if (state.annexMeta.meals) annexLine.push(`Repas SRH : ${state.annexMeta.meals}`);
+  if (state.annexMeta.foodCost) annexLine.push(`Denrées : ${FR.fmtMoney(state.annexMeta.foodCost)}`);
+
+  const header = `
+    <div class="mb-3">
+      <div class="h4 mb-1">${escapeHtml(state.meta.orgName || "EPLE")}</div>
+      <div class="text-muted">
+        Compte financier – Exercice ${escapeHtml(state.meta.fiscalYear || "—")}
+        ${state.meta.dateCA ? " • CA du " + escapeHtml(state.meta.dateCA) : ""}
+      </div>
+      ${annexLine.length ? `<div class="small text-muted mt-1">Annexes : ${escapeHtml(annexLine.join(" • "))}</div>` : ""}
+    </div>
+
+    <div class="mb-3">
+      <div class="small text-muted">Synthèse indicateurs</div>
+      <ul class="mb-0">
+        <li>Résultat : <span class="fw-semibold">${state.computed.result==null?"—":escapeHtml(FR.fmtMoney(state.computed.result))}</span> — ${escapeHtml(state.synthNotes.RESULT || "")}</li>
+        <li>CAF : <span class="fw-semibold">${state.computed.caf==null?"—":escapeHtml(FR.fmtMoney(state.computed.caf))}</span> — ${escapeHtml(state.synthNotes.CAF || "")}</li>
+        <li>FdR : <span class="fw-semibold">${state.computed.fdr==null?"—":escapeHtml(FR.fmtMoney(state.computed.fdr))}</span> — ${escapeHtml(state.synthNotes.FDR || "")}</li>
+        <li>BFdR : <span class="fw-semibold">${state.computed.bfdr==null?"—":escapeHtml(FR.fmtMoney(state.computed.bfdr))}</span> — ${escapeHtml(state.synthNotes.BFDR || "")}</li>
+        <li>TN : <span class="fw-semibold">${state.computed.tn==null?"—":escapeHtml(FR.fmtMoney(state.computed.tn))}</span> — ${escapeHtml(state.synthNotes.TN || "")}</li>
+      </ul>
+    </div>
+  `;
+	buildBilanSocialHtml();
+  const chaptersHtml = state.chapters.map(ch=>`
+    <div class="mb-4">
+      <div class="h5">${escapeHtml(ch.title || "")}</div>
+      <div style="white-space:pre-wrap">${escapeHtml(ch.body || "")}</div>
+    </div>
+  `).join("");
+
+  v.innerHTML = header + chaptersHtml;
+}
+
+/* =========================================================
+   ANNEX TABLE
+========================================================= */
+function renderAnnexTable(){
+  const head = $("tblAnnexHead");
+  const body = $("tblAnnexBody");
+  const rows = state.data.annexRows || [];
+
+  head.innerHTML = "";
+  body.innerHTML = "";
+
+  if (!rows.length){
+    body.innerHTML = `<tr><td class="text-muted">Aucune annexe importée.</td></tr>`;
+    return;
+  }
+
+  const headers = Object.keys(rows[0] || {});
+  headers.slice(0,12).forEach(h=>{
+    const th = document.createElement("th");
+    th.textContent = h;
+    head.appendChild(th);
+  });
+
+  rows.slice(0,200).forEach(r=>{
+    const tr = document.createElement("tr");
+    headers.slice(0,12).forEach(h=>{
+      const td = document.createElement("td");
+      td.textContent = String(r[h] ?? "");
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+}
+
+/* =========================================================
+   AUTO TEXTS
+========================================================= */
+function autoTextResult(){
+  const r = state.computed.result;
+  if (r == null) return "Importer la balance pour produire un commentaire.";
+  if (r > 0) return "Résultat excédentaire : capacité d’autofinancement et consolidation possibles.";
+  if (r < 0) return "Résultat déficitaire : expliciter les causes et les mesures de redressement.";
+  return "Résultat à l’équilibre : vérifier la structure et les facteurs conjoncturels.";
+}
+function autoTextCAF(){
+  const c = state.computed.caf;
+  if (c == null) return "CAF non calculée : compléter les données (dotations/reprises) si nécessaire.";
+  if (c > 0) return "CAF positive : marge pour financer investissements et absorber les aléas.";
+  if (c < 0) return "CAF négative : vigilance, vérifier soutenabilité et rigidités de charges.";
+  return "CAF nulle : vérifier les retraitements et la structure des charges/produits.";
+}
+function autoTextFDR(){
+  const f = state.computed.fdr;
+  if (f == null) return "FdR non renseigné : importer l’état FdR/TN ou saisir manuellement.";
+  if (f < 0) return "FdR négatif : situation structurelle à analyser (financement du cycle, besoins).";
+  return "FdR positif : niveau à apprécier au regard des charges et de la trajectoire pluriannuelle.";
+}
+function autoTextBFDR(){
+  const b = state.computed.bfdr;
+  if (b == null) return "BFdR non renseigné : compléter l’état ou préciser l’analyse du cycle d’exploitation.";
+  if (b > 0) return "BFdR positif : besoin de financement du cycle (stocks/créances).";
+  if (b < 0) return "BFdR négatif : ressources du cycle (dettes > créances).";
+  return "BFdR nul : cycle proche de l’équilibre (à confirmer).";
+}
+function autoTextTN(){
+  const t = state.computed.tn;
+  if (t == null) return "TN non renseignée : importer l’état ou saisir manuellement.";
+  if (t < 0) return "TN négative : tension de trésorerie, examiner restes à recouvrer et décaissements à venir.";
+  return "TN positive : trésorerie disponible, à rapprocher du calendrier d’investissement et des risques.";
+}
+
+/* =========================================================
+   EXPORT / IMPORT / LOCAL
+========================================================= */
+const LOCAL_KEY = "EPLE_COMPTE_FINANCIER_TABS_V1";
+
+function saveLocalMaybe(){
+  try{ localStorage.setItem(LOCAL_KEY, JSON.stringify(state)); }catch{}
+}
+function loadLocalMaybe(){
+  try{
+    const s = localStorage.getItem(LOCAL_KEY);
+    if (!s) return false;
+    const obj = JSON.parse(s);
+    if (obj && obj.meta && obj.chapters){
+      Object.assign(state, obj);
+      return true;
+    }
+  }catch{}
+  return false;
+}
+function exportJSON(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type:"application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "suivi_compte_financier_eple.json";
+  a.click();
+}
+function importJSON(file){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const obj = JSON.parse(e.target.result);
+      Object.assign(state, obj);
+      hydrateUIFromState();
+      computeAll();
+      renderAnnexTable();
+    }catch{
+      alert("Fichier JSON invalide.");
+    }
+  };
+  reader.readAsText(file, "utf-8");
+}
+function exportBalanceCsv(){
+  const rows = state.data.balanceRows || [];
+  if (!rows.length) return alert("Aucune balance à exporter.");
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const csv = XLSX.utils.sheet_to_csv(ws);
+  const blob = new Blob([csv], { type:"text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "balance_export.csv";
+  a.click();
+}
+
+/* =========================================================
+   UI HYDRATE + BINDINGS
+========================================================= */
+function hydrateUIFromState(){
+  $("orgName").value = state.meta.orgName || "";
+  $("fiscalYear").value = state.meta.fiscalYear || "";
+  $("dateCA").value = state.meta.dateCA || "";
+  $("daysMethod").value = String(state.meta.daysBase || 365);
+
+  $("rulesFdr").value = state.rules.fdrGroups || "fonds de roulement,fdr; besoin en fonds de roulement,bfdr; trésorerie nette,tn";
+
+  $("manualFdr").value = state.manual.fdr ? String(state.manual.fdr).replace(".", ",") : "";
+  $("manualTn").value = state.manual.tn ? String(state.manual.tn).replace(".", ",") : "";
+  $("manualBfdr").value = state.manual.bfdr ? String(state.manual.bfdr).replace(".", ",") : "";
+  $("manualCharges").value = state.manual.charges ? String(state.manual.charges).replace(".", ",") : "";
+
+  if (!state.governance) state.governance = { globalLock:false, lastSignature:null };
+  
+  $("annStudents").value = state.annexMeta.students ?? "";
+  $("annStaff").value = state.annexMeta.staff ?? "";
+  $("annMeals").value = state.annexMeta.meals ?? "";
+  $("annFoodCost").value = state.annexMeta.foodCost ? String(state.annexMeta.foodCost).replace(".", ",") : "";
+
+  if (!state.chapters?.length) state.chapters = defaultChapters();
+  rebuildChapterList();
+  if (!state.ui.selectedChapterId && state.chapters[0]) state.ui.selectedChapterId = state.chapters[0].id;
+  if (state.ui.selectedChapterId) selectChapter(state.ui.selectedChapterId);
+
+	// ---- Bilan social / RSE ----
+	if (!state.bilanSocial) state.bilanSocial = {
+		gender:{ maleTotal:0,femaleTotal:0,maleA:0,femaleA:0,maleB:0,femaleB:0,maleC:0,femaleC:0 },
+		payroll:{ total:0,A:0,B:0,C:0,fte:0 },
+		rse:{ absRate:0,accidents:0,turnover:0,partTimeRate:0,trainingHours:0,trainingBudget:0,qvct:"" },
+		ageBandsText:""
+	};
+
+	const g = state.bilanSocial.gender, p = state.bilanSocial.payroll, r = state.bilanSocial.rse;
+
+	if ($("bsMaleTotal")) $("bsMaleTotal").value = g.maleTotal ?? 0;
+	if ($("bsFemaleTotal")) $("bsFemaleTotal").value = g.femaleTotal ?? 0;
+	if ($("bsMaleA")) $("bsMaleA").value = g.maleA ?? 0;
+	if ($("bsFemaleA")) $("bsFemaleA").value = g.femaleA ?? 0;
+	if ($("bsMaleB")) $("bsMaleB").value = g.maleB ?? 0;
+	if ($("bsFemaleB")) $("bsFemaleB").value = g.femaleB ?? 0;
+	if ($("bsMaleC")) $("bsMaleC").value = g.maleC ?? 0;
+	if ($("bsFemaleC")) $("bsFemaleC").value = g.femaleC ?? 0;
+
+	if ($("bsPayrollTotal")) $("bsPayrollTotal").value = (p.total ?? 0).toString().replace(".",",");
+	if ($("bsPayrollA")) $("bsPayrollA").value = (p.A ?? 0).toString().replace(".",",");
+	if ($("bsPayrollB")) $("bsPayrollB").value = (p.B ?? 0).toString().replace(".",",");
+	if ($("bsPayrollC")) $("bsPayrollC").value = (p.C ?? 0).toString().replace(".",",");
+	if ($("bsFTE")) $("bsFTE").value = (p.fte ?? 0).toString().replace(".",",");
+
+	if ($("bsAbsRate")) $("bsAbsRate").value = (r.absRate ?? 0).toString().replace(".",",");
+	if ($("bsAccidents")) $("bsAccidents").value = r.accidents ?? 0;
+	if ($("bsTurnover")) $("bsTurnover").value = (r.turnover ?? 0).toString().replace(".",",");
+	if ($("bsPartTimeRate")) $("bsPartTimeRate").value = (r.partTimeRate ?? 0).toString().replace(".",",");
+	if ($("bsTrainingHours")) $("bsTrainingHours").value = r.trainingHours ?? 0;
+	if ($("bsTrainingBudget")) $("bsTrainingBudget").value = (r.trainingBudget ?? 0).toString().replace(".",",");
+	if ($("bsQVCT")) $("bsQVCT").value = r.qvct || "";
+
+	if ($("bsAgeBands")) $("bsAgeBands").value = state.bilanSocial.ageBandsText || "";
+
+  rebuildReportView();
+  renderAnnexTable();
+}
+
+function applyGlobalLockToUI(){
+  const locked = isGloballyLocked();
+
+  // Boutons rédaction
+  const ids = [
+    "btnAddChapter","btnResetChapters","btnRenumber",
+    "btnUpdateChapter","btnDeleteChapter","btnInsertAuto"
+  ];
+  ids.forEach(id=>{
+    const el = $(id);
+    if (el) el.disabled = locked;
+  });
+
+  // Champs titre/texte : lecture seule
+  if ($("chapTitle")) $("chapTitle").readOnly = locked;
+  if ($("chapBody"))  $("chapBody").readOnly  = locked;
+
+  // Mapping "toggleLock" et flèches sont gérés dans rebuildChapterList() (plus bas)
+  // Paramètres / saisies synthèse (optionnel : je te le mets en "soft lock")
+  // Si tu veux aussi bloquer toutes saisies, décommente ci-dessous:
+  /*
+  ["orgName","fiscalYear","dateCA","daysMethod","rulesFdr",
+   "manualFdr","manualTn","manualBfdr","manualCharges",
+   "annStudents","annStaff","annMeals","annFoodCost"
+  ].forEach(id=>{
+    const el = $(id);
+    if (el) el.disabled = locked;
+  });
+  */
+}
+
+function refreshGlobalLockButton(){
+  const btn = $("btnGlobalLock");
+  if (!btn) return;
+  const locked = isGloballyLocked();
+  btn.classList.toggle("btn-outline-danger", !locked);
+  btn.classList.toggle("btn-danger", locked);
+  btn.innerHTML = locked
+    ? '<i class="bi bi-shield-lock-fill me-1"></i> MODE PRÉ-CA : ON'
+    : '<i class="bi bi-shield-lock me-1"></i> MODE PRÉ-CA : OFF';
+}
+
+function bindUI(){
+  // compute triggers
+  ["btnRecalcTop","btnRecalcBottom"].forEach(id=>{
+    $(id).addEventListener("click", computeAll);
+  });
+
+  $("fileBalance").addEventListener("change", async (e)=>{
+    const f = e.target.files?.[0]; if (!f) return;
+    try{ await handleBalanceImport(f); computeAll(); }
+    catch{ alert("Import balance impossible (format)."); }
+  });
+  $("fileFdr").addEventListener("change", async (e)=>{
+    const f = e.target.files?.[0]; if (!f) return;
+    try{ await handleFdrImport(f); computeAll(); }
+    catch{ alert("Import FdR/TN impossible (format)."); }
+  });
+  $("fileAnnex").addEventListener("change", async (e)=>{
+    const f = e.target.files?.[0]; if (!f) return;
+    try{ await handleAnnexImport(f); }
+    catch{ alert("Import annexe impossible (format)."); }
+  });
+
+  // mapping changes -> recompute
+  ["mapBalAccount","mapBalLabel","mapBalDebit","mapBalCredit","mapBalNet","mapFdrLabel","mapFdrAmount"]
+    .forEach(id=> $(id).addEventListener("change", computeAll));
+
+  // meta + manual + annex
+  ["orgName","fiscalYear","dateCA","daysMethod","rulesFdr","manualFdr","manualTn","manualBfdr","manualCharges",
+   "annStudents","annStaff","annMeals","annFoodCost"
+  ].forEach(id=>{
+    $(id).addEventListener("change", computeAll);
+  });
+
+  // controls
+  $("btnRunControls").addEventListener("click", runControls);
+  $("ctlSearch").addEventListener("input", renderControls);
+  $("ctlSeverity").addEventListener("change", renderControls);
+
+  // chapters
+  $("btnAddChapter").addEventListener("click", ()=>{
+    const ch = { id: crypto.randomUUID(), title: "Nouveau chapitre", body: "" };
+    state.chapters.push(ch);
+	  renumberChapters();
+    rebuildChapterList();
+    selectChapter(ch.id);
+    rebuildReportView();
+    saveLocalMaybe();
+  });
+  $("btnResetChapters").addEventListener("click", ()=>{
+    if (!confirm("Réinitialiser la trame de chapitres ?")) return;
+    state.chapters = defaultChapters();
+    state.ui.selectedChapterId = state.chapters[0].id;
+    rebuildChapterList();
+    selectChapter(state.ui.selectedChapterId);
+    rebuildReportView();
+    saveLocalMaybe();
+  });
+  $("btnInsertAuto").addEventListener("click", insertAutoParagraph);
+  $("btnUpdateChapter").addEventListener("click", updateSelectedChapter);
+  $("btnDeleteChapter").addEventListener("click", ()=>{
+    if (!confirm("Supprimer le chapitre sélectionné ?")) return;
+    deleteSelectedChapter();
+  });
+  $("btnRenumber").addEventListener("click", ()=>{
+    renumberChapters();
+    rebuildChapterList();
+    rebuildReportView();
+    saveLocalMaybe();
+  });
+
+/* ====== IA
+	$("btnAiSuggest")?.addEventListener("click", async ()=>{
+		// Respect du verrouillage global si tu l'as déjà
+		if (typeof isGloballyLocked === "function" && isGloballyLocked()) return;
+
+		try{
+			$("btnAiSuggest").disabled = true;
+			$("aiOutput").value = "Génération en cours…";
+
+			const payload = buildAiRequest();
+			const out = await callAiProxy(payload);
+
+			$("aiOutput").value = out.text || "";
+			$("btnAiAppend").disabled = !out.text;
+			$("btnAiReplace").disabled = !out.text;
+		}catch(e){
+			$("aiOutput").value = "";
+			alert(e.message || "Erreur IA.");
+		}finally{
+			$("btnAiSuggest").disabled = false;
+		}
+	});
+
+	$("btnAiAppend")?.addEventListener("click", ()=>{
+		const t = $("aiOutput").value || "";
+		if (!t) return;
+		if (typeof isGloballyLocked === "function" && isGloballyLocked()) return;
+
+		$("chapBody").value = ($("chapBody").value ? $("chapBody").value + "\n\n" : "") + t;
+	});
+
+	$("btnAiReplace")?.addEventListener("click", ()=>{
+		const t = $("aiOutput").value || "";
+		if (!t) return;
+		if (typeof isGloballyLocked === "function" && isGloballyLocked()) return;
+
+		$("chapBody").value = t;
+	});
+======*/
+  $("btnGlobalLock").addEventListener("click", ()=>{
+    state.governance.globalLock = !state.governance.globalLock;
+    refreshGlobalLockButton();
+    applyGlobalLockToUI();
+    rebuildChapterList(); // pour griser flèches/toggle
+    saveLocalMaybe();
+  });
+
+  $("btnSign").addEventListener("click", async ()=>{
+    try{
+      await signAndTimestamp();
+      alert("Rapport signé et horodaté.");
+    }catch(e){
+      alert("Signature impossible (WebCrypto indisponible ?).");
+    }
+  });
+
+	[
+		"bsMaleTotal","bsFemaleTotal","bsMaleA","bsFemaleA","bsMaleB","bsFemaleB","bsMaleC","bsFemaleC",
+		"bsPayrollTotal","bsPayrollA","bsPayrollB","bsPayrollC","bsFTE",
+		"bsAbsRate","bsAccidents","bsTurnover","bsPartTimeRate","bsTrainingHours","bsTrainingBudget","bsQVCT",
+		"bsAgeBands"
+	].forEach(id=>{
+		const el = $(id);
+		if (el) el.addEventListener("change", computeAll);
+	});
+
+  // print/copy
+  $("btnPrint").addEventListener("click", ()=> window.print());
+  $("btnCopyReport").addEventListener("click", async ()=>{
+    const text = $("reportView")?.innerText || "";
+    try{ await navigator.clipboard.writeText(text); alert("Rapport copié."); }
+    catch{ alert("Copie impossible (droits navigateur)."); }
+  });
+
+  // export/import state
+  $("btnExportState").addEventListener("click", exportJSON);
+  $("fileImportState").addEventListener("change", (e)=>{
+    const f = e.target.files?.[0]; if (!f) return;
+    importJSON(f);
+  });
+
+  // local
+  $("btnSaveLocal").addEventListener("click", ()=>{ saveLocalMaybe(); alert("Enregistré en local."); });
+  $("btnLoadLocal").addEventListener("click", ()=>{
+    const ok = loadLocalMaybe();
+    if (!ok) return alert("Aucune sauvegarde locale.");
+    hydrateUIFromState();
+    computeAll();
+    alert("Sauvegarde rechargée.");
+  });
+
+  // imports reset
+  $("btnClearImports").addEventListener("click", ()=>{
+    if (!confirm("Effacer imports (balance + état FdR/TN) ?")) return;
+    state.data.balanceRows = [];
+    state.data.fdrRows = [];
+    ["mapBalAccount","mapBalLabel","mapBalDebit","mapBalCredit","mapBalNet","mapFdrLabel","mapFdrAmount"]
+      .forEach(id=>{ $(id).innerHTML = "<option value=''>—</option>"; });
+    computeAll();
+  });
+
+  // bottom actions
+  $("btnExportCsv").addEventListener("click", exportBalanceCsv);
+  $("btnResetAll").addEventListener("click", ()=>{
+    if (!confirm("Réinitialiser tout ?")) return;
+    state.meta = { orgName:"", fiscalYear:"", dateCA:"", daysBase:365 };
+    state.mappings = { balance:{account:"",label:"",debit:"",credit:"",net:""}, fdr:{label:"",amount:""} };
+    state.rules = { fdrGroups: "fonds de roulement,fdr; besoin en fonds de roulement,bfdr; trésorerie nette,tn" };
+    state.data = { balanceRows:[], fdrRows:[], annexRows:[] };
+    state.manual = { fdr:0, tn:0, bfdr:0, charges:0 };
+    state.synthNotes = { RESULT:"—", CAF:"—", FDR:"—", BFDR:"—", TN:"—" };
+    state.controls = [];
+    state.chapters = defaultChapters();
+    state.ui.selectedChapterId = state.chapters[0].id;
+    state.annexMeta = { students:null, staff:null, meals:null, foodCost:null };
+    hydrateUIFromState();
+    computeAll();
+  });
+}
+
+/* =========================================================
+   BOOT
+========================================================= */
+window.addEventListener("DOMContentLoaded", ()=>{
+  $("app-version").textContent = APP_VERSION;
+
+  const ok = loadLocalMaybe();
+  if (!ok){
+    state.meta.dateCA = todayISO();
+    state.chapters = defaultChapters();
+    state.ui.selectedChapterId = state.chapters[0].id;
+  }
+  hydrateUIFromState();
+  refreshGlobalLockButton();
+  applyGlobalLockToUI();
+  renderTraceView();
+  bindUI();
+  computeAll();
+});
+</script>
+</body>
+</html>
